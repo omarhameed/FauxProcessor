@@ -85,7 +85,7 @@ int FindInCache(unsigned short address) {
 */
 // Associative Addressing only
 
-int UpdateCache(unsigned short address, unsigned short content) {
+int UpdateCache(unsigned short address, unsigned short content, unsigned int word_byte) {
 #ifdef CacheUpdate
     printf("CACHE Update requst at address: 0x%04X with the contents: 0x%02x\n", address, content);
 #endif
@@ -95,7 +95,9 @@ int UpdateCache(unsigned short address, unsigned short content) {
 #ifdef Associative 
     // printf(RED"ADDRESS %04X EVICTED THAT THIS SHIT %02X\n"RESET, cache[oldest_index].address, cache[oldest_index].contents);
     for (int i = 1; i < CACHE_SIZE; i++) {
+        
         if (cache[i].age <= cache[oldest_index].age) {
+
             oldest_index = i;
         }
     }
@@ -117,11 +119,23 @@ int UpdateCache(unsigned short address, unsigned short content) {
     printf(RED "CACHE evicted at address: 0x%04X with the contents: 0x%02x\n" RESET, cache[oldest_index].address, cache[oldest_index].contents);
 #endif
 
-    cache[oldest_index].address = address;
-    cache[oldest_index].cache_line.word = content;
-    //else cache[oldest_index].cache_line.byte[low_high]= content;
-    cache[oldest_index].valid = true; // Add this line
-    //if (read_write == WR)cache[oldest_index].dirty = true;
+        cache[oldest_index].address = address;
+        cache[oldest_index].valid = true; // Add this line
+    if (word_byte == WORD) {
+        cache[oldest_index].cache_line.word = content;
+
+
+    }
+    else {
+        if (address % 2 == 0) {
+            // If address is even, load high byte
+            cache[oldest_index].cache_line.byte[1] = content >> 8;//& 0xFF;
+        }
+        else {
+            // If address is odd, load low byte
+            cache[oldest_index].cache_line.byte[0] = content & 0xFF; //>>8;
+        }
+    }
 #ifdef CacheUpdate
     printf("CACHE Updated at address: 0x%04X with the contents: 0x%02x\n", cache[oldest_index].address, cache[oldest_index].contents);
 #endif
@@ -144,7 +158,7 @@ void PrintCache() {
     for (int i = 0; i < CACHE_SIZE; i++) {
         printf(" |CACHE LINE %2d", i);
         printf(" | Address: 0x%04X ", cache[i].address);
-        printf(" | Contents: 0x%02X ", cache[i].cache_line.word);
+        printf(" | Contents: 0x%4X ", cache[i].cache_line.word);
         printf(" | Age: %02d ", cache[i].age);
         printf(" | Word/Byte: %02d ", cache[i].word_byte);
         printf(" | Dirty: %s |\n", cache[i].dirty ? "1" : "0");
@@ -162,40 +176,25 @@ void Cache(unsigned short address, unsigned short* content,
     found_index = FindInCache(address);
 
     if (read_write == R) {
+        
         if (found_index == -1) {
             // Read  A Word from bus 
-            Bus(address, &cache[found_index].cache_line.word, R, WORD);
-
-            
-            
-
+            if (word_byte == WORD ) Bus(address, content, R, WORD);
+            else Bus(address, content, R, WORD);
+            UpdateCache(address, *content, word_byte);
         }
         else {
             DecrementAllExcept(found_index);
         }
+
         found_index = FindInCache(address);
 
-        // Store in Cache Line
-        if (word_byte == WORD) {
-            *content = cache[found_index].cache_line.word;
-        }
-        else {
-            // if address even load high byte else load low byte
-            //UpdateCache(address, (unsigned short)cache[found_index].cache_line.byte[0]);
-
-            if (address % 2 == 0) {
-                // If address is even, load high byte
-                *content = cache[found_index].cache_line.byte[1];
-            }
-            else {
-                // If address is odd, load low byte
-                *content = cache[found_index].cache_line.byte[0];
-            }
-
-        }
+        
         cache[found_index].valid = true;
-        
-        
+        // Trust me Im an Engineer 
+        *content = cache[found_index].cache_line.word;
+
+        printf("CACHE READ  %s  AT ADDRESS %04X FILLED WITH %04X \n", word_byte ? "BYTE" : "WORD", cache[found_index].address, cache[found_index].cache_line.word);
     }
     else {
         high_byte = *content >> 8;
@@ -215,44 +214,57 @@ void Cache(unsigned short address, unsigned short* content,
         // If we're using write-through caching
 #ifdef WRT_THRO
 
-        if (word_byte == WORD) { // if we need to write a word
-            cache[found_index].cache_line.word = *content;
-
-            //Bus(address, content, WR, WORD);
-
-
-            found_index = FindInCache(address);
-            Bus(address, &cache[found_index].cache_line.word, WR, WORD);
-            if (found_index == -1) {
-                printf("\nError: CACHE LINE INCORRECTLY SET 3\n");
-                return 0;
+        if (found_index == -1) { // MISS ME
+            if (word_byte == WORD) { // if we need to write a word
+                Bus(address, content, WR, WORD);
+                
             }
+            else {
+                Bus(address, content, WR, BYTE);
+                // why pointres so weird 
+                
+            }
+            UpdateCache(address, *content, word_byte);
+            
+            
 
         }
-        else { // if we need to write a byte
+       
+        else { // HIT me 
 
             // This can be fucking working but idk 
-            
+
             //Bus(address, &cache[found_index].cache_line.byte[0], WR, BYTE);
             //*content = cache[found_index].cache_line.byte[0];
             
 
-            // if not this should fucking work 
-            if (address % 2 == 0) {
-                // If address is even, load high byte
-                cache[found_index].cache_line.byte[1] = *content ;
-                Bus(address, &cache[found_index].cache_line.byte[1], WR, BYTE);
-                UpdateCache(address, *content);
+            if (word_byte == WORD) { // if we need to write a word
+                Bus(address, content, WR, WORD);
+                cache[found_index].cache_line.word = *content;
+
             }
             else {
-                // If address is odd, load low byte
-                Bus(address, &cache[found_index].cache_line.byte[0], WR, BYTE);
-                // cache[found_index].cache_line.byte[0] = *content ;
-                UpdateCache(address, (unsigned short)*content);
+                if (address % 2 == 0) {
+                    // If address is even, load high byte
+
+                    Bus(address, &cache[found_index].cache_line.byte[1], WR, BYTE);
+                    cache[found_index].cache_line.byte[1] = *content;
+                }
+                else {
+                    // If address is odd, load low byte
+                    Bus(address, &cache[found_index].cache_line.byte[0], WR, BYTE);
+                    cache[found_index].cache_line.byte[0] = *content;
+                    
+                }
             }
 
         }
-
+       // UpdateCache(address, *content, word_byte);
+        found_index = FindInCache(address);
+        if (found_index == -1) {
+            printf("\nError: CACHE LINE INCORRECTLY SET 3\n");
+            return 0;
+        }
 
 #endif
 
