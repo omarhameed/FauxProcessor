@@ -1,20 +1,28 @@
 
 /*
-* This file contains the implementation of the cache memory system.
-* It provides functions for initializing the cache, finding an address in the cache,
-* updating the cache with a new address, printing the current state of the cache,
-* and updating the age of a cache line at a particular index to 7 (most recently used).
-*/
+ * CACHE MEMORY SYSTEM IMPLEMENTATION
+ *
+ * This file provides a comprehensive emulation of cache memory operations, offering
+ * both write-back and write-through caching strategies. The file contains functions for
+ * cache initialization, address location, cache updating, cache printing, and cache line aging.
+ * It emulates associative as well as direct mapping cache strategies.
+ *
+ *
+ * Author: Omar
+ */
 
-// Emulating both a write-back cache and write through cache in order to use one uncomment one 
-
-//#ifdef SHIT
 
 
-#define WRT_BACK //s best is Achraf Hakimi
-//#define WRT_THRO
-#define Associative
 
+// Macro to choose Write-Back or Write-Through caching strategy, 
+// uncomment to select this strategy and comment out the Write-Through macro
+
+#define WRT_BACK // "Achraf Hakimi is the best"
+// #define WRT_THRO
+
+// Macro to choose Associative OR DIRCT caching please dont uncomment both
+#define Associative 
+#define DIRCT
 
 #include <assert.h>
 #include <stdio.h>
@@ -44,7 +52,6 @@ void DecrementAllExcept(int index) {
 }
 /*
 *  purpose   : Function to initialize the cache
-*              Loop over all cache lines, initialize the address to 0 and age to 0
 *  parameters: None
 *  return    : None
 */
@@ -60,41 +67,46 @@ void InitializeCache() {
 }
 
 /*
-*  purpose   : Loop over all cache lines, If the current cache line's address matches the requested address, return index
-*  parameters: Address to find in the cache
-*  return    : Index of the found address in cache, if not found return -1
+*  Purpose   : Searches through all cache lines. If the current cache line's address matches the requested address, the index is returned.
+*              If the address is not found, the function returns -1.
+*
+*  Parameters:
+*              address - The address to be located in the cache.
+*
+*  Return    : Returns the index of the found address in cache. If the address is not found, returns -1.
 */
 int FindInCache(unsigned short address) {
 
-    int i = 0;
-    do {
-        // Check if address is populated 
+    for (int i = 0; i < CACHE_SIZE; i++) {
+        // Check if address matches and cache line is valid
         if (cache[i].address == address && cache[i].valid) {
             return i;
         }
-
-        i++;
-    } while (i < CACHE_SIZE);
-    return -1;
+    }
+    return -1;  // Return -1 if address is not found in cache
 }
 
 /*
-*  purpose   : Function to update the cache with a new address & content
-*              Loop over all cache lines to find the oldest, then update the oldest cache line to the new address
-*  parameters: Address to add to cache
-*  return    : oldest_index of the cache
+*  purpose    : Function to update the cache with a new address and content
+*                   Searches through all cache lines to locate the oldest one, and updates it with the new address and content.
+*                   This function follows an associative addressing approach. If Write-Back is enabled, it also checks dirty bits
+*                   to decide if a memory write is needed before updating the cache line.
+*
+*  parameters : address - The new address to be added to the cache
+*                   content - The content associated with the new address
+*                   word_byte - Flag to determine if the operation is on a word or byte (WORD/BYTE)
+*
+*  return     :  Returns the index of the oldest cache line that was updated
 */
-// Associative Addressing only
 
 int UpdateCache(unsigned short address, unsigned short content, unsigned int word_byte) {
 #ifdef CacheUpdate
-    printf("CACHE Update requst at address: 0x%04X with the contents: 0x%02x\n", address, content);
+    printf("Cache Update Request: Address = 0x%04X, Content = 0x%02X\n", address, content);
 #endif
     int oldest_index = 0;
 
 
 #ifdef Associative 
-    // printf(RED"ADDRESS %04X EVICTED THAT THIS SHIT %02X\n"RESET, cache[oldest_index].address, cache[oldest_index].contents);
     for (int i = 1; i < CACHE_SIZE; i++) {
         
         if (cache[i].age <= cache[oldest_index].age) {
@@ -102,10 +114,15 @@ int UpdateCache(unsigned short address, unsigned short content, unsigned int wor
             oldest_index = i;
         }
     }
-    // printf(YELLOW"NEW ADDRESS %04X EVICTED THAT THIS SHIT %02X\n"RESET, address, content);
-#else
+#endif
+#ifdef  DIRCT
     oldest_index = address % CACHE_SIZE;
 #endif 
+
+#ifdef CacheUpdate
+    printf(RED "Cache Evicted: Address = 0x%04X, Content = 0x%02X\n" RESET, cache[oldest_index].address, cache[oldest_index].contents);
+#endif
+
 #ifdef WRT_BACK
 
      // If either the high byte or low byte of the dirty bit is set then we must write to memory to avoid brain damage 
@@ -138,12 +155,10 @@ int UpdateCache(unsigned short address, unsigned short content, unsigned int wor
 
 
 #endif
-#ifdef CacheUpdate
-    printf(RED "CACHE evicted at address: 0x%04X with the contents: 0x%02x\n" RESET, cache[oldest_index].address, cache[oldest_index].contents);
-#endif
+
 
         cache[oldest_index].address = address;
-        cache[oldest_index].valid = true; // Add this line
+        cache[oldest_index].valid = true; 
     if (word_byte == WORD) {
         cache[oldest_index].cache_line.word = content;
 
@@ -153,17 +168,16 @@ int UpdateCache(unsigned short address, unsigned short content, unsigned int wor
     else {
         if (address % 2 == 0) {
             // If address is even, load high byte
-            cache[oldest_index].cache_line.byte[1] = content >> 8;//& 0xFF;
+            cache[oldest_index].cache_line.byte[1] = content >> 8;
         }
         else {
             // If address is odd, load low byte
-            cache[oldest_index].cache_line.byte[0] = content & 0xFF; //>>8;
+            cache[oldest_index].cache_line.byte[0] = content & 0xFF; 
         }
     }
 #ifdef CacheUpdate
-    printf("CACHE Updated at address: 0x%04X with the contents: 0x%02x\n", cache[oldest_index].address, cache[oldest_index].contents);
+    printf("Cache Updated Completed: Address = 0x%04X, Content = 0x%02X\n", cache[oldest_index].address, cache[oldest_index].contents);
 #endif
-
 
     DecrementAllExcept(oldest_index);
 
@@ -189,15 +203,34 @@ void PrintCache() {
         printf(" | DH: %s |\n", cache[i].dirty_hi ? "1" : "0");
     }
 }
+
+
+/*
+*  purpose   : Function to manage the cache read and write operations.
+*              This function handles the logic of read/write operations in cache, including miss/hit situations,
+*              with different behaviors for Write-through (1) and Write-back (0) methods.
+*              In Write-through, it simultaneously writes into cache and main memory.
+*              In Write-back, it delays the main memory write operation until the CACHE line is evicted.
+*              If a cache miss occurs (when the cache does not contain the requested data),
+*              the function calls the appropriate UpdateCache().
+*              In case of a cache hit (when the requested data is found in cache),
+*              it directly manipulates the cache contents (if its a write) and calls DecrementAllExcept() function in both cases
+*  
+*  parameters: address - The memory address to be read/written
+*              content - Pointer to the content to be written or where the read content should be stored
+*              read_write - Symbol to determine if the operation is a read (R) or write (WR)
+*              word_byte - Symbol to determine if the operation is on a word or byte (WORD/BYTE)
+*
+*  return    : None
+*/
+
+
+
 void Cache(unsigned short address, unsigned short* content,
     unsigned char read_write, unsigned char word_byte) {
 
 
-    int oldest_index;
     int found_index;
-    unsigned char high_byte, low_byte;
-    unsigned short cache_content;
-
     found_index = FindInCache(address);
 
     if (read_write == R) {
@@ -208,15 +241,10 @@ void Cache(unsigned short address, unsigned short* content,
             else Bus(address, content, R, WORD);
             UpdateCache(address, *content, word_byte);
         }
-        else {
-            DecrementAllExcept(found_index);
-        }
+        
+        else DecrementAllExcept(found_index);
 
         found_index = FindInCache(address);
-
-        
-        
-
         if (found_index == -1) {
             printf(RED "\nError oopsi: CACHE LINE INCORRECTLY SET \n"RESET);
             return 0;
@@ -229,81 +257,45 @@ void Cache(unsigned short address, unsigned short* content,
         printf("CACHE READ  %s  AT ADDRESS %04X FILLED WITH %04X \n", word_byte ? "BYTE" : "WORD", cache[found_index].address, cache[found_index].cache_line.word);
     }
     else {
-        high_byte = *content >> 8;
-
-        low_byte = *content & 0xFF;
-
-        /*
-        *  write operation:
-        *   -> The dirty bit is set when the processor writes to (modifies) this memory
-        *   -> write-back cache (0): when data is written into the cache, the write operation to the main memory is delayed or postponed.
-        *   -> write-through (1) : every time data is written into the cache, it's also written into the main memory.
-        */
-        // Write & MISS
+    
 
 #ifdef WRT_THRO
 
         if (found_index == -1) { // MISS ME
-            if (word_byte == WORD) { // if we need to write a word
-                Bus(address, content, WR, WORD);
-                
-            }
-            else {
-                Bus(address, content, WR, BYTE);
-                // why pointres so weird 
-                
-            }
+            Bus(address, content, WR, (word_byte == WORD) ? WORD : BYTE);
             UpdateCache(address, *content, word_byte);
-            
-            
-
         }
        
         else { // HIT me 
-
-            // This can be fucking working but idk 
-
-            //Bus(address, &cache[found_index].cache_line.byte[0], WR, BYTE);
-            //*content = cache[found_index].cache_line.byte[0];
-            
-
-            if (word_byte == WORD) { // if we need to write a word
+            if (word_byte == WORD) { 
                 Bus(address, content, WR, WORD);
                 cache[found_index].cache_line.word = *content;
-
             }
+
             else {
+
                 if (address % 2 == 0) {
                     // If address is even, load high byte
-
-                    Bus(address, &cache[found_index].cache_line.byte[1], WR, BYTE);
-                    cache[found_index].cache_line.byte[1] = *content;
+                    Bus(address, &cache[found_index].cache_line.byte[HI], WR, BYTE);
+                    cache[found_index].cache_line.byte[HI] = *content;
                 }
                 else {
                     // If address is odd, load low byte
-                    Bus(address, &cache[found_index].cache_line.byte[0], WR, BYTE);
-                    cache[found_index].cache_line.byte[0] = *content;
-                    
+                    Bus(address, &cache[found_index].cache_line.byte[HI], WR, BYTE);
+                    cache[found_index].cache_line.byte[HI] = *content;
                 }
             }
-            
-
         }
-       // UpdateCache(address, *content, word_byte);
         found_index = FindInCache(address);
         if (found_index == -1) {
-            printf(RED "\nError oopsi: CACHE LINE INCORRECTLY SET \n"RESET);
+            printf(RED "\nError: CACHE LINE INCORRECTLY Read at address %04x filled with %04x \n"RESET, address, *content);
             return 0;
         }
         DecrementAllExcept(found_index);
-
 #endif
 
 
 #ifdef WRT_BACK
-
-
-
         if (found_index == -1) { // MISS ME
             UpdateCache(address, *content, word_byte);
             found_index = FindInCache(address);
@@ -315,12 +307,10 @@ void Cache(unsigned short address, unsigned short* content,
                 if (address % 2 == 0) {
                     // If address is even, load high byte
                     cache[found_index].dirty_hi = true;
-
                 }
                 else {
                     // If address is odd, load low byte
                     cache[found_index].dirty_lo = true;
-
                 }
             }
         }
@@ -341,34 +331,26 @@ void Cache(unsigned short address, unsigned short* content,
                     // If address is even, load high byte
                     cache[found_index].cache_line.byte[1] = *content;
                     cache[found_index].dirty_hi = true;
-                    
                 }
                 else {
                     // If address is odd, load low byte
                     cache[found_index].cache_line.byte[0] = *content;
                     cache[found_index].dirty_lo = true;
-
                 }
             }
             
 
         }
-
-        
         if (found_index == -1) {
             printf(RED "\nError big oppssie: WE WROTE TO CACHE LINE  -1 !! trying to Write address %04X with content %04X\n"RESET, address, *content);
             return 0;
         }
         
-#endif // NEWWRT_BACK
-
+#endif
 
     }
-    //PrintCache();
 }
 
-
-//#endif
 
 
 
