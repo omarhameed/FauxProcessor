@@ -101,7 +101,7 @@ Both modules contain debugging flags (`DEBUG`, `SwapDebug`, `ARITH_DEBUG`, `ADDC
 
 ## 📌 **Requirements**:
 
-- 🛠 A C/C++ compiler (e.g., GCC, Clang, or MSVC for Visual Studio).
-- 📖 Familiarity with S-Record formatted files if you wish to load custom programs.
-- 🧠 Basic understanding of CPU emulation and the XM-23 machine architecture.
+- A C/C++ compiler (e.g., GCC, Clang, or MSVC for Visual Studio).
+- Familiarity with S-Record formatted files if you wish to load custom programs.
+- XM-23 Assembler 
 - (Optional) 🖥 Visual Studio for a more streamlined debugging experience. Remember to set the `_CRT_SECURE_NO_WARNINGS` preprocessor definition.
