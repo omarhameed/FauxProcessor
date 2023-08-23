@@ -12,7 +12,6 @@
  * for commands and providing feedback based on their input.
  *
  * @author Omar Hameed
- * @student_id B00764655
  * @date Last updated on July 15, 2023
  *
  *

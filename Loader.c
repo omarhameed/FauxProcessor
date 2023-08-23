@@ -12,7 +12,6 @@
  * This is part of the coursework for ECED3403 - Computer Architecture, Assignment 1.
  *
  * @author Omar Hameed
- * @student_id B00764655
  * @date Last updated on June 16, 2023
  *
  * 
